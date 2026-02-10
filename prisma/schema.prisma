@@ -1,14 +1,205 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// -------------------------------------------------------------------------
+// PHASE 0: THE SKELETON
+// -------------------------------------------------------------------------
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+  // NOTE: 'url' is intentionally omitted here for Prisma 7 compatibility.
+  // It is loaded via prisma.config.ts and your .env file.
+}
+
+// -------------------------------------------------------------------------
+// LAYER 1: MULTI-TENANCY & AUTH
+// -------------------------------------------------------------------------
+
+model Tenant {
+  id              String    @id @default(uuid())
+  name            String
+  slug            String    @unique
+  planTier        String    @default("FREE")
+  settings        Json?     // Stores mileage rates, academic year start, etc.
+  createdAt       DateTime  @default(now())
+  deletedAt       DateTime? // Soft Delete
+  
+  users           User[]
+  students        Student[]
+  contacts        Contact[]
+  terms           Term[]
+  classTemplates  ClassTemplate[]
+  invoices        Invoice[]
+  staffLedgers    StaffLedger[] // Fixed: Back-relation for StaffLedger
+  expenses        Expense[]     // Fixed: Back-relation for Expense
+}
+
+model User {
+  id              String    @id @default(uuid())
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  email           String    @unique
+  role            String    @default("TUTOR") // OWNER, ADMIN, TUTOR
+  
+  // Compliance
+  dbsNumber       String?
+  dbsExpiry       DateTime?
+  dbsVerifiedBy   String?
+  
+  accreditations  Accreditation[]
+  payouts         StaffLedger[]
+  expenses        Expense[]      // Fixed: Back-relation for Expense
+  deletedAt       DateTime?
+}
+
+model Accreditation {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  title           String
+  issuedBy        String
+  achievedAt      DateTime
+  expiryDate      DateTime?
+}
+
+// -------------------------------------------------------------------------
+// LAYER 2: CRM (STUDENTS & CONTACTS)
+// -------------------------------------------------------------------------
+
+model Contact {
+  id              String    @id @default(uuid())
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  firstName       String
+  lastName        String
+  email           String
+  phone           String?
+  address         String?
+  students        Student[]
+  invoices        Invoice[]
+  deletedAt       DateTime?
+}
+
+model Student {
+  id              String    @id @default(uuid())
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  contactId       String
+  contact         Contact   @relation(fields: [contactId], references: [id])
+  
+  firstName       String
+  lastName        String
+  dob             DateTime
+  yearGroup       Int       // -1=Nursery, 0=Reception, 1-13=Year Groups, 99=Adult
+  medicalNotes    String?
+  photoConsent    Boolean   @default(false)
+  
+  enrolments      Enrolment[]
+  deletedAt       DateTime?
+}
+
+// -------------------------------------------------------------------------
+// LAYER 3: SCHEDULING
+// -------------------------------------------------------------------------
+
+model Term {
+  id              String    @id @default(uuid())
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  name            String
+  startDate       DateTime
+  endDate         DateTime
+  holidays        Json?     // Array of holiday date ranges
+  
+  sessions        ClassSession[]
+  enrolments      Enrolment[]
+}
+
+model ClassTemplate {
+  id              String    @id @default(uuid())
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  name            String
+  dayOfWeek       Int       // 0=Sunday, 1=Monday...
+  startTime       String    // "16:00"
+  endTime         String
+  billingType     String    @default("FIXED") // FIXED or ATTENDANCE
+  basePrice       Decimal
+  tutorPayRate    Decimal
+  travelMiles     Decimal   @default(0)
+  
+  minYearGroup    Int?
+  maxYearGroup    Int?
+  successorId     String?   // Points to next class for promotions
+  
+  sessions        ClassSession[]
+  enrolments      Enrolment[]
+}
+
+model ClassSession {
+  id              String    @id @default(uuid())
+  templateId      String
+  template        ClassTemplate @relation(fields: [templateId], references: [id])
+  termId          String
+  term            Term      @relation(fields: [termId], references: [id])
+  
+  startDateTime   DateTime
+  status          String    @default("SCHEDULED") // SCHEDULED, COMPLETED, CANCELLED
+  isHoliday       Boolean   @default(false)
+}
+
+model Enrolment {
+  id              String    @id @default(uuid())
+  studentId       String
+  student         Student   @relation(fields: [studentId], references: [id])
+  classTemplateId String
+  classTemplate   ClassTemplate @relation(fields: [classTemplateId], references: [id])
+  termId          String
+  term            Term      @relation(fields: [termId], references: [id])
+  status          String    @default("ACTIVE")
+}
+
+// -------------------------------------------------------------------------
+// LAYER 4: FINANCIALS
+// -------------------------------------------------------------------------
+
+model Invoice {
+  id              String    @id @default(uuid())
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  contactId       String
+  contact         Contact   @relation(fields: [contactId], references: [id])
+  
+  status          String    @default("DRAFT")
+  dueDate         DateTime
+  totalAmount     Decimal
+  lineItems       Json      // Detailed descriptions/prices
+  createdAt       DateTime  @default(now())
+}
+
+model StaffLedger {
+  id              String    @id @default(uuid())
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  
+  amount          Decimal
+  status          String    @default("PENDING") // PENDING, PAID
+  description     String
+  createdAt       DateTime  @default(now())
+}
+
+model Expense {
+  id              String    @id @default(uuid())
+  tenantId        String
+  tenant          Tenant    @relation(fields: [tenantId], references: [id])
+  
+  category        String    // RENT, TRAVEL, SUPPLIES, ROYALTIES
+  amount          Decimal
+  isReimbursable  Boolean   @default(false)
+  userId          String?   // Who is owed money if reimbursable
+  user            User?     @relation(fields: [userId], references: [id]) // Fixed: Relation to User
+  createdAt       DateTime  @default(now())
 }
