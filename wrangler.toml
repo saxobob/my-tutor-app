@@ -1,6 +1,6 @@
 name = "my-tutor-app"
 type = "javascript"
-pages_build_output_dir = ".next/static"
+pages_build_output_dir = ".next"
 
 [env.production]
 name = "my-tutor-app-prod"
