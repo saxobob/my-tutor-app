@@ -1,9 +1,0 @@
-name = "my-tutor-app"
-type = "javascript"
-
-[build]
-command = "npm run build && next-on-pages"
-cwd = "./"
-
-[build.upload]
-format = "service-worker"
