@@ -1,0 +1,14 @@
+name = "my-tutor-app"
+type = "javascript"
+pages_build_output_dir = ".next/static"
+
+[env.production]
+name = "my-tutor-app-prod"
+
+[build]
+command = "npm run build"
+cwd = "./"
+watch-paths = ["src/**/*.ts", "src/**/*.tsx"]
+
+[build.upload]
+format = "service-worker"
