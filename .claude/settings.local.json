@@ -7,7 +7,11 @@
       "Bash(taskkill:*)",
       "Bash(Get-Process -Name \"node\" -ErrorAction SilentlyContinue)",
       "Bash(Stop-Process -Force)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(netstat:*)",
+      "Bash(Get-NetTCPConnection -LocalPort 3001 -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object OwningProcess)",
+      "Bash(lsof:*)"
     ]
   }
 }
